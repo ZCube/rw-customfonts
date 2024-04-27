@@ -1,12 +1,16 @@
 version: "3"
 
+dotenv: [".env"]
 env:
   STEAM_APPS: D:\SteamLibrary\steamapps
-  STEAM_OS: '{{if eq OS "windows"}}Win64{{else}}Linux{{end}}'
+  STEAM_OS: '{{if eq OS "windows"}}Win64_Data{{else}}{{if eq OS "linux"}}Linux_Data{{else}}Mac.app{{end}}{{end}}'
 
 tasks:
-  build:
+  prepare:
     cmds:
       - curl -k -LO https://github.com/pardeike/HarmonyRimWorld/releases/latest/download/HarmonyMod.zip
       - 7z x -y HarmonyMod.zip -opackages
+
+  build:
+    cmds:
       - dotnet build ./Source/CustomFonts/CustomFonts.sln -c "Release 1.5"

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Verse;
@@ -44,7 +45,6 @@ namespace CustomFonts
     public class CustomFonts : Mod
     {
         private readonly FontSettings _settings;
-        private static List<string> _fontNames = new List<string>();
         private static bool _hasInstalledFontNames;
         private static bool _hasBundledFonts;
         private static bool _hasOSFontAssets;
@@ -118,7 +118,7 @@ namespace CustomFonts
                 fontListLeftRect.width - 20f, fontListLeftRect.height - 30f);
             var leftFontListScrollInner = new Rect(leftFontListScrollOuter.x, leftFontListScrollOuter.y,
                 leftFontListScrollOuter.width - 24f,
-                23.6f * (3 + BundledFonts.Count + _fontNames.Count));
+                23.6f * (3 + BundledFonts.Count + OSFontPaths.Count));
             Widgets.Label(fontListLeftRect, "---- General Interface ----");
             Widgets.BeginScrollView(leftFontListScrollOuter, ref _leftScrollPosition, leftFontListScrollInner);
             var leftListingStandard = leftFontListScrollInner.BeginListingStandard();
@@ -131,7 +131,7 @@ namespace CustomFonts
                     SaveFont(name);
             }
             leftListingStandard.GapLine();
-            foreach (var name in _fontNames)
+            foreach (var name in OSFontPaths.Keys.OrderBy(x => x))
             {
                 if (leftListingStandard.RadioButton(name, FontSettings.CurrentUIFontName == name))
                     SaveFont(name);
@@ -191,20 +191,75 @@ namespace CustomFonts
 
         public override string SettingsCategory() => "Custom Fonts";
 
-        public static void SetupOSInstalledFontNames()
+        static void ExecuteBashCommand(string command)
         {
-            if (_hasInstalledFontNames) return;
-            _hasInstalledFontNames = true;
-            _fontNames = Font.GetOSInstalledFontNames().ToList();
-            _fontNames.Sort();
+            command = command.Replace("\"", "\"\"");
+
+            var proc = new Process()
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "/bin/bash",
+                    Arguments = "-c \"" + command + "\"",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                }
+            };
+
+            using (proc)
+            {
+                proc.Start();
+                proc.WaitForExit();
+
+                if (!proc.StandardError.EndOfStream)
+                {
+                    Log.Message($"[Custom Fonts] error : {proc.StandardError.ReadToEnd()}");
+                }
+            }
         }
 
         public static void SetupOSFontPaths()
         {
             if (_hasOSFontAssets) return;
             _hasOSFontAssets = true;
+
+            string[] FontDirectories = new string[] {
+                "/usr/share/fonts",
+                "/usr/local/share/fonts",
+                "/run/host/fonts",
+                "/run/host/user-fonts",
+                "/run/host/local-fonts"
+            };
+
+            foreach (var dir in FontDirectories)
+            {
+                Log.Message(
+                    $"[Custom Fonts] Cehck font dir: {dir}");
+                if (!Directory.Exists(dir)) continue;
+                Log.Message(
+                    $"[Custom Fonts] Loading font dir: {dir}");
+                foreach (var path in Directory.EnumerateFiles(dir, "*.ttf", SearchOption.AllDirectories))
+                {
+                    Log.Message(
+                        $"[Custom Fonts] Loading font: {path}");
+                    var asset = TMP_FontAsset.CreateFontAsset(new Font(path));
+                    var fontName = $"{asset.faceInfo.familyName} ({asset.faceInfo.styleName})";
+                    if (!OSFontPaths.ContainsKey(fontName))
+                    {
+                        OSFontPaths.Add(fontName, path);
+                    }
+                }
+            }
+
+            Log.Message(
+                $"[Custom Fonts] Loading OS fonts");
+
             foreach (var path in Font.GetPathsToOSFonts())
             {
+                Log.Message(
+                    $"[Custom Fonts] Loading font: {path}");
                 var asset = TMP_FontAsset.CreateFontAsset(new Font(path));
                 var fontName = $"{asset.faceInfo.familyName} ({asset.faceInfo.styleName})";
                 if (!OSFontPaths.ContainsKey(fontName))
@@ -270,15 +325,28 @@ namespace CustomFonts
 
             var fontSize = (int)Math.Round(DefaultFonts[fontIndex].fontSize * FontSettings.ScaleFactor);
 
+            TMP_FontAsset fontAsset;
+
             if (isBundled)
             {
                 font = BundledFonts[FontSettings.CurrentUIFontName];
             }
             else
             {
-                font = FontSettings.CurrentUIFontName != FontSettings.DefaultFontName
-                    ? Font.CreateDynamicFontFromOSFont(FontSettings.CurrentUIFontName, fontSize)
-                    : DefaultFonts[fontIndex];
+                if (FontSettings.CurrentUIFontName == FontSettings.DefaultFontName)
+                {
+                    font = DefaultFonts[fontIndex];
+                }
+                else if (OSFontPaths.ContainsKey(FontSettings.CurrentUIFontName))
+                {
+                    {
+                        font = CustomFonts.BundledFonts[FontSettings.CurrentUIFontName];
+                    }
+                else
+                    {
+                        font = DefaultFonts[fontIndex];
+                    }
+                }
             }
 
 #if DEBUG
@@ -333,7 +401,6 @@ namespace CustomFonts
                 if (_patcherInitialized) return;
 
                 _patcherInitialized = true;
-                CustomFonts.SetupOSInstalledFontNames();
                 CustomFonts.SetupOSFontPaths();
                 CustomFonts.SetupBundledFonts();
                 CustomFonts.DefaultTMPFontAsset = WorldFeatureTextMesh_TextMeshPro.WorldTextPrefab.GetComponent<TextMeshPro>().font;
@@ -403,7 +470,6 @@ namespace CustomFonts
                 AccessTools.StaticFieldRefAccess<float>(typeof(WorldFeatureTextMesh_TextMeshPro), "TextScale") =
                     1.75f * FontSettings.ScaleFactor;
             }
-
         }
     }
 }
