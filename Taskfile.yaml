@@ -14,3 +14,12 @@ tasks:
   build:
     cmds:
       - dotnet build ./Source/CustomFonts/CustomFonts.sln -c "Release 1.5"
+
+  release:
+    cmds:
+      - git archive --format=tar.gz HEAD -o custom-fonts.tar.gz
+      - tar zxvf custom-fonts.tar.gz -C "${STEAM_APPS}/Common/RimWorld/Mods/rw-customfonts/"
+      - |
+        cd "${STEAM_APPS}/Common/RimWorld/Mods/rw-customfonts/"
+        rm Taskfile.*
+        rm .git*
