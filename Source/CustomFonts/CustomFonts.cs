@@ -83,7 +83,6 @@ namespace CustomFonts
 
         public override void DoSettingsWindowContents(Rect inRect) // The GUI part to edit the mod settings.
         {
-            SetupOSInstalledFontNames();
             SetupOSFontPaths();
             SetupBundledFonts();
 
@@ -339,13 +338,11 @@ namespace CustomFonts
                 }
                 else if (OSFontPaths.ContainsKey(FontSettings.CurrentUIFontName))
                 {
-                    {
-                        font = CustomFonts.BundledFonts[FontSettings.CurrentUIFontName];
-                    }
+                    font = new Font(CustomFonts.OSFontPaths[FontSettings.CurrentUIFontName]);
+                }
                 else
-                    {
-                        font = DefaultFonts[fontIndex];
-                    }
+                {
+                    font = DefaultFonts[fontIndex];
                 }
             }
 
